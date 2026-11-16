@@ -305,4 +305,229 @@ function saveSetoran(){
   saveAll(); renderAll(); alert('Setoran tersimpan!');
   function bayarTagihan(tokoId, piutang){
   var toko=getToko(tokoId);
+ var jml=parseInt(prompt('Bayar piutang '+toko.nama+'\nPiutang: '+fmt(piutang)+'\n\nMasukkan jumlah bayar: ', piutang));
+  if(!jml || jml<=0) return;
+  var metode=prompt('Metode Bayar? Ketik: Cash / Transfer / QRIS', 'Transfer');
+  if(!metode) metode='Transfer';
+  setoranList.unshift({id:Date.now(), tokoId:tokoId, jumlah:jml, tgl:todayStr(), metode:metode, ket:'Bayar Tagihan via Tombol Bayar'});
+  saveAll(); renderAll();
+  alert('Pembayaran '+fmt(jml)+' dari '+toko.nama+' tersimpan! Sisa piutang: '+fmt(piutang-jml));
+  if(confirm('Cetak bukti bayar?')) printTagihanToko(tokoId);
+}
+}
+function delSetoran(id){ setoranList=setoranList.filter(function(x){ return x.id!==id; }); saveAll(); renderAll(); }
+function savePengaturan(){
+  setting.nama=document.getElementById('set-nama').value; setting.alamat=document.getElementById('set-alamat').value; setting.wa=document.getElementById('set-wa').value; setting.rek=document.getElementById('set-rek').value;
+  setting.minStok=parseInt(document.getElementById('set-min-stok').value)||5; setting.komisiDefault=parseInt(document.getElementById('set-komisi').value)||20;
+  saveAll(); renderAll(); alert('Pengaturan tersimpan!');
+}
+function resetData(){ if(!confirm('Reset semua data?')) return; localStorage.clear(); location.reload(); }
+function renderToko(){
+  var q=(document.getElementById('search-toko').value||'').toLowerCase(); var st=document.getElementById('filter-toko-status').value;
+  var html='';
+  for(var i=0;i<tokoList.length;i++){
+    var t=tokoList[i]; if(q && t.nama.toLowerCase().indexOf(q)===-1) continue; if(st!=='all' && t.status!==st) continue;
+    var omzet=0; for(var j=0;j<jualList.length;j++){ if(jualList[j].tokoId===t.id) omzet+=jualList[j].total||0; }
+    var stokCount=0; for(var s=0;s<stokToko.length;s++){ if(stokToko[s].tokoId===t.id) stokCount+=stokToko[s].stok; }
+    html+='<div class="card"><div class="flex between"><h3>'+t.nama+'</h3><span class="badge '+(t.status==='Aktif'?'badge-green':'badge-gray')+'">'+t.status+'</span></div><p class="small muted">'+(t.kota||'')+' • PIC '+(t.pemilik||'')+' • WA '+(t.wa||'')+'</p><p class="small mt">Komisi: <b>'+t.komisi+'%</b> • Stok: <b>'+stokCount+'</b> • Omzet: <b>'+fmt(omzet)+'</b></p><div class="flex wrap mt"><button class="btn btn-blue btn-sm" onclick="editToko('+t.id+')">✏️ Edit</button><button class="btn btn-red btn-sm" onclick="delToko('+t.id+')">🗑️ Hapus</button></div></div>';
+  }
+  document.getElementById('list-toko').innerHTML=html||'<p>Belum ada toko</p>';
+}
+function renderProduk(){
+  var q=(document.getElementById('search-produk').value||'').toLowerCase(); var kat=document.getElementById('filter-kategori').value;
+  var html='';
+  for(var i=0;i<produkList.length;i++){
+    var p=produkList[i]; if(q && p.nama.toLowerCase().indexOf(q)===-1 && (p.barcode||'').indexOf(q)===-1) continue; if(kat!=='all' && p.kategori!==kat) continue;
+    var margin=p.jual-p.modal; var marginPersen=p.modal>0?Math.round(margin/p.modal*100):0;
+    var stokTokoTotal=0; for(var s=0;s<stokToko.length;s++){ if(stokToko[s].produkId===p.id) stokTokoTotal+=stokToko[s].stok; }
+    html+='<div class="card"><div class="flex between"><h3>'+p.nama+'</h3><span class="badge badge-blue">'+p.kategori+'</span></div><p class="small muted">Barcode: '+(p.barcode||'')+'</p><p class="small mt">Modal: '+fmt(p.modal)+' • Jual: <b>'+fmt(p.jual)+'</b><br>Margin: <b>'+fmt(margin)+' ('+marginPersen+'%)</b><br>Stok Gudang: <b>'+p.stokGudang+'</b> • Stok di Toko: <b>'+stokTokoTotal+'</b></p><div class="flex wrap mt"><button class="btn btn-blue btn-sm" onclick="editProduk('+p.id+')">✏️ Edit</button><button class="btn btn-yellow btn-sm" onclick="tambahStokGudang('+p.id+')">+ Stok</button><button class="btn btn-red btn-sm" onclick="delProduk('+p.id+')">🗑️ Hapus</button></div></div>';
+  }
+  document.getElementById('list-produk').innerHTML=html||'<p>Belum ada produk</p>';
+}
+function renderTitip(){
+  var html='';
+  for(var i=0;i<titipList.length;i++){ var t=titipList[i]; var toko=getToko(t.tokoId); var p=getProduk(t.produkId); html+='<tr><td>'+t.tgl+'</td><td>'+(toko?toko.nama:'')+'</td><td>'+(p?p.nama:'')+'</td><td>'+t.jumlah+'</td><td><span class="badge badge-green">'+t.status+'</span></td><td><button class="btn btn-red btn-sm" onclick="delTitip('+t.id+')">Hapus</button></td></tr>'; }
+  document.getElementById('table-titip').innerHTML=html||'<tr><td colspan="6" style="text-align:center">Belum ada titip</td></tr>';
+  var optToko=''; for(var j=0;j<tokoList.length;j++) optToko+='<option value="'+tokoList[j].id+'">'+tokoList[j].nama+'</option>';
+  var optProduk=''; for(var k=0;k<produkList.length;k++) optProduk+='<option value="'+produkList[k].id+'">'+produkList[k].nama+' - Stok '+produkList[k].stokGudang+'</option>';
+  document.getElementById('titip-toko').innerHTML=optToko; document.getElementById('titip-produk').innerHTML=optProduk; document.getElementById('opname-produk').innerHTML=optProduk;
+}
+function renderStok(){
+  var tokoFilter=document.getElementById('stok-filter-toko').value; var q=(document.getElementById('stok-search').value||'').toLowerCase();
+  var totalGudang=0; var totalToko=0; var nilaiGudang=0;
+  for(var i=0;i<produkList.length;i++){ totalGudang+=produkList[i].stokGudang||0; nilaiGudang+= (produkList[i].stokGudang||0)*produkList[i].modal; }
+  for(var s=0;s<stokToko.length;s++) totalToko+=stokToko[s].stok;
+  document.getElementById('stok-gudang-total').innerText=totalGudang; document.getElementById('stok-toko-total').innerText=totalToko; document.getElementById('nilai-stok').innerText=fmt(nilaiGudang);
+  var html='';
+  for(var j=0;j<stokToko.length;j++){
+    var st=stokToko[j]; if(tokoFilter!=='all' && st.tokoId!==parseInt(tokoFilter)) continue;
+    var p=getProduk(st.produkId); var t=getToko(st.tokoId); if(!p||!t) continue; if(q && p.nama.toLowerCase().indexOf(q)===-1) continue;
+    html+='<tr><td>'+p.nama+'</td><td>'+t.nama+'</td><td><b>'+st.stok+'</b> '+(st.stok<=setting.minStok?'<span class="badge badge-red">Menipis!</span>':'')+'</td><td>'+fmt(st.hargaJual)+'</td><td>'+fmt(st.stok*st.hargaJual)+'</td><td><span class="small muted">Titip via menu Titip</span></td></tr>';
+  }
+  document.getElementById('table-stok').innerHTML=html||'<tr><td colspan="6" style="text-align:center">Belum ada stok di toko</td></tr>';
+  var optToko='<option value="all">Semua Toko</option>'; for(var k=0;k<tokoList.length;k++) optToko+='<option value="'+tokoList[k].id+'">'+tokoList[k].nama+'</option>';
+  document.getElementById('stok-filter-toko').innerHTML=optToko;
+  var opHtml=''; for(var o=0;o<opnameList.slice(0,5).length;o++){ var op=opnameList[o]; var pp=getProduk(op.produkId); opHtml+='<div>'+op.tgl+' - '+(pp?pp.nama:'')+' : '+op.stokLama+' → '+op.stokBaru+'</div>'; }
+  document.getElementById('table-opname').innerHTML=opHtml;
+}
+function renderJual(){
+  var html='';
+  for(var i=0;i<jualList.length;i++){ var j=jualList[i]; var t=getToko(j.tokoId); var p=getProduk(j.produkId); html+='<tr><td>'+j.tgl+'</td><td>'+(t?t.nama:'')+'</td><td>'+(p?p.nama:'')+'</td><td>'+j.qty+'</td><td>'+fmt(j.total)+'</td><td>'+fmt(j.labaBersih||0)+'</td><td><button class="btn btn-red btn-sm" onclick="delJual('+j.id+')">Hapus</button></td></tr>'; }
+  document.getElementById('table-jual').innerHTML=html||'<tr><td colspan="7" style="text-align:center">Belum ada penjualan</td></tr>';
+  var optToko=''; for(var k=0;k<tokoList.length;k++) optToko+='<option value="'+tokoList[k].id+'">'+tokoList[k].nama+'</option>';
+  document.getElementById('jual-toko').innerHTML=optToko; document.getElementById('retur-toko').innerHTML=optToko; document.getElementById('setoran-toko').innerHTML=optToko;
+  loadReturProduk(); renderJualProduk();
+}
+function renderRetur(){
+  var html='';
+  for(var i=0;i<returList.length;i++){ var r=returList[i]; var t=getToko(r.tokoId); var p=getProduk(r.produkId); html+='<tr><td>'+r.tgl+'</td><td>'+(t?t.nama:'')+'</td><td>'+(p?p.nama:'')+'</td><td>'+r.jumlah+'</td><td>'+r.alasan+'</td><td><button class="btn btn-red btn-sm" onclick="delRetur('+r.id+')">Hapus</button></td></tr>'; }
+  document.getElementById('table-retur').innerHTML=html||'<tr><td colspan="6" style="text-align:center">Belum ada retur</td></tr>';
+}
+function renderSetoran(){
+  var html='';
+  for(var i=0;i<setoranList.length;i++){ var s=setoranList[i]; var t=getToko(s.tokoId); html+='<tr><td>'+s.tgl+'</td><td>'+(t?t.nama:'')+'</td><td>'+fmt(s.jumlah)+'</td><td>'+s.metode+'</td><td><button class="btn btn-red btn-sm" onclick="delSetoran('+s.id+')">Hapus</button></td></tr>'; }
+  document.getElementById('table-setoran').innerHTML=html||'<tr><td colspan="5" style="text-align:center">Belum ada setoran</td></tr>';
+  var piutangHtml='';
+  for(var j=0;j<tokoList.length;j++){
+    var toko=tokoList[j]; var omzet=0; var komisiTotal=0; for(var k=0;k<jualList.length;k++){ if(jualList[k].tokoId===toko.id){ omzet+=jualList[k].total||0; komisiTotal+=jualList[k].komisi||0; } }
+    var setor=0; for(var s2=0;s2<setoranList.length;s2++){ if(setoranList[s2].tokoId===toko.id) setor+=setoranList[s2].jumlah; }
+    var piutang=omzet-komisiTotal-setor;
+    piutangHtml+='<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:10px 0;font-size:12px"><span><b>'+toko.nama+'</b> • Omzet '+fmt(omzet)+' - Komisi '+fmt(komisiTotal)+' - Setoran '+fmt(setor)+'<br><b style="color:'+(piutang>0?'red':'green')+'">Piutang '+fmt(piutang)+'</b></span><span style="display:flex;flex-direction:column;gap:4px"><button class="btn btn-green btn-sm" onclick="bayarTagihan('+toko.id+','+piutang+')">💳 Bayar</button><button class="btn btn-blue btn-sm" onclick="printTagihanToko('+toko.id+')">🖨️ Tagihan</button></span></div>';
+  }
+  document.getElementById('list-piutang').innerHTML=piutangHtml;
+}
+function renderDashboard(){
+  var omzet=0; var modal=0; var komisi=0;
+  for(var i=0;i<jualList.length;i++){
+    var j=jualList[i];
+    var p=getProduk(j.produkId);
+    var t=getToko(j.tokoId);
+    omzet += j.total || 0;
+    modal += p ? (j.qty || 0) * p.modal : (j.modal || 0);
+    komisi += t ? Math.round((j.total || 0) * (t.komisi || 0) / 100) : 0;
+  }
+  var laba=omzet-modal-komisi;
+  var setorTotal=0; for(var s=0;s<setoranList.length;s++) setorTotal+=setoranList[s].jumlah || 0;
+  var piutang=omzet-komisi-setorTotal;
+  document.getElementById('dash-omzet').innerText=fmt(omzet);
+  document.getElementById('dash-omzet-sub').innerText=jualList.length+' transaksi';
+  document.getElementById('dash-laba').innerText=fmt(laba);
+  document.getElementById('dash-piutang').innerText=fmt(piutang);
+  var totalStok=0; for(var p2=0;p2<produkList.length;p2++) totalStok+=produkList[p2].stokGudang || 0;
+  for(var q=0;q<stokToko.length;q++) totalStok+=stokToko[q].stok || 0;
+  document.getElementById('dash-stok').innerText=totalStok;
+  document.getElementById('dash-stok-sub').innerText=tokoList.length+' toko • '+produkList.length+' produk';
+  var perToko={}; for(var j2=0;j2<jualList.length;j2++){ perToko[jualList[j2].tokoId]=(perToko[jualList[j2].tokoId]||0)+jualList[j2].total; }
+  var topTokoHtml=''; for(var key in perToko){ var t2=getToko(parseInt(key)); topTokoHtml+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid #eee"><span>'+(t2?t2.nama:'')+'</span><span><b>'+fmt(perToko[key])+'</b></span></div>'; }
+  document.getElementById('top-toko').innerHTML=topTokoHtml||'Belum ada penjualan';
+  var perProduk={}; for(var k=0;k<jualList.length;k++){ perProduk[jualList[k].produkId]=(perProduk[jualList[k].produkId]||0)+jualList[k].qty; }
+  var topProdukHtml=''; for(var key2 in perProduk){ var pp=getProduk(parseInt(key2)); topProdukHtml+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid #eee"><span>'+(pp?pp.nama:'')+'</span><span><b>'+perProduk[key2]+' pcs</b></span></div>'; }
+  document.getElementById('top-produk').innerHTML=topProdukHtml||'Belum ada penjualan';
+  var alertHtml=''; for(var a=0;a<produkList.length;a++){ if(produkList[a].stokGudang<=setting.minStok) alertHtml+='<div style="background:#fefce8;padding:8px;border-radius:8px;margin-bottom:6px">⚠️ '+produkList[a].nama+' sisa '+produkList[a].stokGudang+'</div>'; }
+  document.getElementById('alert-stok').innerHTML=alertHtml||'Stok aman ✅';
+  var today=todayStr(); var titipHari=''; for(var t3=0;t3<titipList.length;t3++){ if(titipList[t3].tgl===today){ var tt=getToko(titipList[t3].tokoId); var pr=getProduk(titipList[t3].produkId); titipHari+='<div>'+titipList[t3].jumlah+'x '+(pr?pr.nama:'')+' → '+(tt?tt.nama:'')+'</div>'; } }
+  document.getElementById('titip-hari-ini').innerHTML=titipHari||'Tidak ada titip hari ini';
+  document.getElementById('alert-piutang').innerHTML='Piutang total: '+fmt(piutang);
+}
+function renderLaporan(){
+  var omzet=0; var modal=0; var komisi=0;
+  for(var i=0;i<jualList.length;i++){
+    var j=jualList[i];
+    var p=getProduk(j.produkId);
+    var t=getToko(j.tokoId);
+    var totalJual=j.total || 0;
+    var modalJual=p ? (j.qty||0)*p.modal : (j.modal||0);
+    var komisiJual=t ? Math.round(totalJual*(t.komisi||0)/100) : 0;
+    omzet+=totalJual; modal+=modalJual; komisi+=komisiJual;
+    j.modal=modalJual; j.komisi=komisiJual; j.labaBersih=totalJual-modalJual-komisiJual;
+  }
+  document.getElementById('l-omzet').innerText=fmt(omzet);
+  document.getElementById('l-modal').innerText=fmt(modal);
+  document.getElementById('l-komisi').innerText=fmt(komisi);
+  document.getElementById('l-laba').innerText=fmt(omzet-modal-komisi);
+  var perToko={}; for(var j2=0;j2<jualList.length;j2++){ perToko[jualList[j2].tokoId]=(perToko[jualList[j2].tokoId]||0)+jualList[j2].total; }
+  var htmlToko=''; for(var key in perToko){ var t2=getToko(parseInt(key)); htmlToko+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-bottom:1px solid #eee"><span>'+(t2?t2.nama:'')+'</span><span>'+fmt(perToko[key])+'</span></div>'; }
+  document.getElementById('laporan-toko').innerHTML=htmlToko||'Belum ada';
+  var perProduk={}; for(var k=0;k<jualList.length;k++){ perProduk[jualList[k].produkId]=(perProduk[jualList[k].produkId]||0)+jualList[k].total; }
+  var htmlProduk=''; for(var key2 in perProduk){ var p2=getProduk(parseInt(key2)); htmlProduk+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-bottom:1px solid #eee"><span>'+(p2?p2.nama:'')+'</span><span>'+fmt(perProduk[key2])+'</span></div>'; }
+  document.getElementById('laporan-produk').innerHTML=htmlProduk||'Belum ada';
+}
+function renderBackup(){
+  var el=document.getElementById('backup-info'); if(el) el.innerHTML='Toko: <b>'+tokoList.length+'</b> | Produk: <b>'+produkList.length+'</b> | Titip: <b>'+titipList.length+'</b> | Jual: <b>'+jualList.length+'</b>';
+  var hist=document.getElementById('backup-history'); if(hist) hist.innerHTML=backupHistory.slice(0,5).map(function(h){ return '<div>'+h.tgl+' - '+h.size+'</div>'; }).join('')||'Belum ada backup';
+}
+function renderPengaturan(){
+  document.getElementById('set-nama').value=setting.nama; document.getElementById('set-alamat').value=setting.alamat; document.getElementById('set-wa').value=setting.wa; document.getElementById('set-rek').value=setting.rek; document.getElementById('set-min-stok').value=setting.minStok; document.getElementById('set-komisi').value=setting.komisiDefault;
+}
+function renderAll(){ renderDashboard(); renderToko(); renderProduk(); renderTitip(); renderStok(); renderJual(); renderRetur(); renderSetoran(); renderLaporan(); renderBackup(); renderLaporanJual();
+renderPengaturan(); }
+function toggleSidebar(){
+  var sb=document.querySelector('.sidebar'); if(!sb) return;
+  sb.classList.toggle('open');
+  var overlay=document.getElementById('sidebar-overlay');
+  if(!overlay){ overlay=document.createElement('div'); overlay.id='sidebar-overlay'; overlay.className='sidebar-overlay'; overlay.onclick=toggleSidebar; document.body.appendChild(overlay); }
+  overlay.classList.toggle('show', sb.classList.contains('open'));
+}
+function init(){
+  var t1=document.getElementById('titip-tgl'); if(t1) t1.valueAsDate=new Date();
+  var t2=document.getElementById('jual-tgl'); if(t2) t2.valueAsDate=new Date();
+  var t3=document.getElementById('retur-tgl'); if(t3) t3.valueAsDate=new Date();
+  var t4=document.getElementById('setoran-tgl'); if(t4) t4.valueAsDate=new Date();
+  renderAll();
+}
+// === RETUR TOKO KE GUDANG - SATU FITUR SAJA, TIDAK BOLEH DOBEL ===
+if(typeof returList==='undefined') var returList=[];
+
+function renderReturProduk(){
+  var tokoId=parseInt(document.getElementById('retur-toko').value);
+  var sel=document.getElementById('retur-produk');
+  var html='';
+  for(var i=0;i<stokToko.length;i++){
+    var s=stokToko[i];
+    if(s.tokoId===tokoId && s.stok>0){
+      var p=getProduk(s.produkId);
+      html+='<option value="'+s.produkId+'">'+(p?p.nama:'')+' - Stok: '+s.stok+'</option>';
+    }
+  }
+  sel.innerHTML=html||'<option value="">Tidak ada stok di toko ini</option>';
+  cekQtyRetur();
+}
+
+function renderRetur(){
+  var html=''; var total=0;
+  returList.forEach(function(r){
+    total += (parseInt(r.qty)||0);
+    var p = getProduk(r.produkId);
+    var t = getToko(r.tokoId);
+    var namaP = (p && p.nama) ? p.nama : (r.namaProduk && r.namaProduk!=='undefined' ? r.namaProduk : 'Produk Dihapus');
+    var namaT = (t && t.nama) ? t.nama : (r.namaToko && r.namaToko!=='undefined' ? r.namaToko : 'Toko Dihapus');
+    var cat = (r.catatan && r.catatan!=='undefined') ? r.catatan : '-';
+    var als = r.alasan || '-';
+    html+='<div style="border-bottom:1px solid #eee;padding:10px 0;font-size:13px"><b>'+namaP+'</b> - '+r.qty+' pcs <span style="float:right">'+(r.tgl||'')+'</span><br><span class="small muted">Toko: '+namaT+' | Alasan: '+als+' | '+cat+'</span><br><button class="btn btn-red btn-sm" onclick="hapusRetur('+r.id+')">Hapus</button></div>';
+  });
+  document.getElementById('list-retur').innerHTML=html||'<p class="small muted">Belum ada retur.</p>';
+  document.getElementById('total-retur').innerText=total+' pcs';
+}
+
+function perbaikiDataRetur(){
+  var diperbaiki=0;
+  returList.forEach(function(r){
+    var p = getProduk(r.produkId);
+    var t = getToko(r.tokoId);
+    if(p && (!r.namaProduk || r.namaProduk==='undefined')){ r.namaProduk=p.nama; diperbaiki++; }
+    if(t && (!r.namaToko || r.namaToko==='undefined')){ r.namaToko=t.nama; diperbaiki++; }
+    if(!r.catatan || r.catatan==='undefined') r.catatan='';
+  });
+  saveAll(); renderRetur();
+  alert('Berhasil diperbaiki '+diperbaiki+' data retur Bos!');
+}
+
+function ubahQtyRetur(n){
+  var el=document.getElementById('retur-qty');
+  var v=(parseInt(el.value)||1)+n;
+  if(v<1) v=1;
+  el.value=v;
+  cekQtyRetur();
+      }
+
   
