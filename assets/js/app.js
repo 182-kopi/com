@@ -530,4 +530,272 @@ function ubahQtyRetur(n){
   cekQtyRetur();
       }
 
+function cekQtyRetur(){
+  var tokoId=parseInt(document.getElementById('retur-toko').value);
+  var produkId=parseInt(document.getElementById('retur-produk').value);
+  var s=getStokToko(tokoId, produkId);
+  var info=document.getElementById('retur-qty-info');
+  if(info) info.innerText='Stok di toko: '+(s?s.stok:0)+' pcs • Yang mau di-retur: '+(document.getElementById('retur-qty').value||1)+' pcs';
+}
+
+// INI SATU-SATUNYA FUNGSI TAMBAH RETUR - YANG LAIN SUDAH DIHAPUS
+function saveRetur(){
+  var tokoId=parseInt(document.getElementById('retur-toko').value);
+  var produkId=parseInt(document.getElementById('retur-produk').value);
+  var qty=parseInt(document.getElementById('retur-qty').value)||0;
+  var alasan=document.getElementById('retur-alasan').value;
+  var t=getToko(tokoId); var p=getProduk(produkId);
+  if(!tokoId || !produkId || qty<=0){ alert('Pilih toko, produk, dan jumlah!'); return; }
+  var s=getStokToko(tokoId, produkId);
+  if(!s || s.stok<qty){ alert('Stok tidak cukup! Stok: '+(s?s.stok:0)+' • Mau retur: '+qty); return; }
+  var div=document.createElement('div');
+  div.id='modal-konfirm-retur';
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  div.innerHTML='<div style="background:#fff;width:100%;max-width:400px;border-radius:16px;padding:20px">'
+    +'<h3>Yakin retur?</h3>'
+    +'<p>Toko: '+(t?t.nama:'')+'<br>Produk: '+(p?p.nama:'')+'<br><b style="font-size:20px">Jumlah: '+qty+' pcs</b><br>Alasan: '+alasan+'<br>Stok toko sisa: '+(s.stok-qty)+' pcs</p>'
+    +'<button onclick="doRetur()" style="width:100%;padding:14px;background:#dc2626;color:#fff;border:none;border-radius:12px;font-size:16px;margin-bottom:8px">YA, RETUR '+qty+' PCS</button>'
+    +'<button onclick="document.getElementById(\'modal-konfirm-retur\').remove()" style="width:100%;padding:14px;background:#e5e7eb;border:none;border-radius:12px;font-size:16px">BATAL - SALAH JUMLAH</button></div>';
+  document.body.appendChild(div);
+  window._returTmp={tokoId:tokoId, produkId:produkId, qty:qty, alasan:alasan};
+}
+
+// JANGAN ADA LAGI tambahRetur() SETELAH INI - INI PENGGANTINYA
+function tambahRetur(){ saveRetur(); }
+
+function doRetur(){
+  var tmp = window._returTmp;
+  if(!tmp){ alert('Data retur hilang, coba lagi'); return; }
+  var s = null;
+  for(var i=0;i<stokToko.length;i++){
+    if(stokToko[i].tokoId===tmp.tokoId && stokToko[i].produkId===tmp.produkId){
+      s = stokToko[i]; break;
+    }
+  }
+  var p = getProduk(tmp.produkId);
+  if(!s){ alert('Stok toko tidak ketemu!'); return; }
+  if(!p){ alert('Produk tidak ketemu!'); return; }
+
+  s.stok = s.stok - tmp.qty; // 10 - 2 = 8 - HARUS MINUS
+  p.stokGudang = (p.stokGudang||0) + tmp.qty; // Gudang nambah
+
+  var data={id:Date.now(), tokoId:tmp.tokoId, produkId:tmp.produkId, qty:tmp.qty, harga:p.jual, tgl:todayStr(), alasan:tmp.alasan, namaProduk:p.nama, namaToko:getToko(tmp.tokoId)?getToko(tmp.tokoId).nama:''};
+  returList.unshift(data);
+  window._returTmp = null;
+  saveAll();
+  renderAll();
+  renderReturProduk();
+  renderRetur();
+  cekQtyRetur();
+  var m = document.getElementById('modal-konfirm-retur');
+  if(m) m.remove();
+  document.getElementById('retur-qty').value=1;
+  printNotaRetur(data.id);
+}
+
+function hapusRetur(id){
+  if(!confirm('Hapus data retur ini? Stok tidak akan dikembalikan.')) return;
+  returList=returList.filter(function(x){ return x.id!==id; });
+  saveAll(); renderRetur();
+}
+
+function printNotaRetur(id){
+  var r=null; for(var i=0;i<returList.length;i++) if(returList[i].id===id) r=returList[i];
+  if(!r){ alert('Data retur tidak ketemu'); return; }
+  var t=getToko(r.tokoId); var p=getProduk(r.produkId);
+  var total=r.qty*r.harga;
+  var html='<div class="nota-box">'
+    +'<h2>NOTA RETUR</h2>'
+    +'<p class="center"><b>'+(setting.nama||'TITIPKU')+'</b><br>'+(setting.alamat||'')+'<br>'+(setting.telp||'')+'</p>'
+    +'<hr>'
+    +'<table style="border:none"><tr><td style="border:none;padding:2px 0">No Retur</td><td style="border:none;padding:2px 0;text-align:right">: RT-'+r.id+'</td></tr>'
+    +'<tr><td style="border:none;padding:2px 0">Tanggal</td><td style="border:none;padding:2px 0;text-align:right">: '+r.tgl+'</td></tr>'
+    +'<tr><td style="border:none;padding:2px 0">Toko</td><td style="border:none;padding:2px 0;text-align:right">: '+(t?t.nama:'')+'</td></tr>'
+    +'<tr><td style="border:none;padding:2px 0">Alasan</td><td style="border:none;padding:2px 0;text-align:right">: '+r.alasan+'</td></tr></table>'
+    +'<hr>'
+    +'<table><tr><th>Produk</th><th>Qty</th><th>Total</th></tr>'
+    +'<tr><td>'+(p?p.nama:'')+'<br><span style="font-size:11px;color:#666">'+fmt(r.harga)+' / pcs</span></td><td>'+r.qty+' pcs</td><td>'+fmt(total)+'</td></tr></table>'
+    +'<hr>'
+    +'<p style="text-align:right;font-size:16px"><b>Total Retur: '+fmt(total)+'</b></p>'
+    +'<p style="font-size:11px;color:#666">Barang sudah dikembalikan dari toko ke gudang. Stok toko berkurang, stok gudang bertambah.</p>'
+    +'<div class="ttd"><div>Penerima Gudang<br><br><br>___________</div><div>Pengirim Toko<br><br><br>___________</div></div>'
+    +'<p class="center" style="margin-top:20px;font-size:11px">Terima kasih - 182Kopi</p>'
+    +'</div>';
+  printWindow('Nota Retur', html);
+}
+// ===== HUTANG =====
+if(typeof hutangList==='undefined') var hutangList=[];
+function tambahHutang(){
+  var nama=document.getElementById('hutang-nama').value.trim();
+  var total=parseInt(document.getElementById('hutang-total').value)||0;
+  var ket=document.getElementById('hutang-ket').value.trim();
+  if(!nama){ alert('Isi nama yang ngutang dulu Bos!'); return; }
+  if(total<=0){ alert('Isi total hutang dulu!'); return; }
+  hutangList.unshift({id:Date.now(), nama:nama, total:total, sisa:total, ket:ket, tgl:todayStr(), status:'BELUM LUNAS', bayarRiwayat:[]});
+  document.getElementById('hutang-nama').value='';
+  document.getElementById('hutang-total').value='';
+  document.getElementById('hutang-ket').value='';
+  saveAll(); renderHutang();
+  alert('Hutang '+nama+' Rp '+fmt(total)+' berhasil disimpan!');
+}
+function bayarHutang(id, lunasSemua){
+  var h=null; for(var i=0;i<hutangList.length;i++) if(hutangList[i].id===id) h=hutangList[i];
+  if(!h) return;
+  var bayar=0;
+  if(lunasSemua){ bayar=h.sisa; }
+  else{
+    var input=prompt('Bayar berapa untuk '+h.nama+'?\nSisa hutang: '+fmt(h.sisa), h.sisa);
+    if(!input) return; bayar=parseInt(input)||0;
+    if(bayar<=0){ alert('Nominal tidak valid'); return; }
+    if(bayar>h.sisa){ alert('Bayar melebihi sisa hutang! Sisa: '+fmt(h.sisa)); return; }
+  }
+  h.sisa-=bayar;
+  h.bayarRiwayat.push({tgl:todayStr(), jumlah:bayar});
+  if(h.sisa<=0){ h.sisa=0; h.status='LUNAS'; alert('LUNAS! Hutang '+h.nama+' sudah lunas semua.'); }
+  else{ alert('Terbayar '+fmt(bayar)+'. Sisa hutang '+h.nama+': '+fmt(h.sisa)); }
+  saveAll(); renderHutang();
+}
+function hapusHutang(id){
+  if(!confirm('Hapus data hutang ini?')) return;
+  hutangList=hutangList.filter(function(x){ return x.id!==id; });
+  saveAll(); renderHutang();
+}
+function renderHutang(){
+  var belum=''; var lunas=''; var totalBelum=0;
+  hutangList.forEach(function(h){
+    var row='<div style="border-bottom:1px solid #eee;padding:10px 0;font-size:13px"><b>'+h.nama+'</b> <span style="float:right">'+fmt(h.sisa)+'</span><br><span class="small muted">'+h.tgl+' | Total: '+fmt(h.total)+' | '+h.ket+'</span><br><span style="font-size:11px;color:#666">Dibayar: '+(h.bayarRiwayat||[]).map(function(b){ return fmt(b.jumlah)+' ('+b.tgl+')'; }).join(', ')||'-'+'</span><br>';
+    if(h.status==='LUNAS'){
+      row+='<span style="color:green;font-weight:bold">✅ LUNAS</span> <button class="btn btn-red btn-sm" onclick="hapusHutang('+h.id+')">Hapus</button></div>';
+      lunas+=row;
+    } else {
+      totalBelum+=h.sisa;
+      row+='<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-green btn-sm" onclick="bayarHutang('+h.id+',false)">Bayar Sebagian</button><button class="btn btn-blue btn-sm" onclick="bayarHutang('+h.id+',true)">Lunasi Semua</button><button class="btn btn-red btn-sm" onclick="hapusHutang('+h.id+')">Hapus</button></div></div>';
+      belum+=row;
+    }
+  });
+  document.getElementById('list-hutang').innerHTML=belum||'<p class="small muted">Tidak ada hutang. Aman Bos!</p>';
+  document.getElementById('list-hutang-lunas').innerHTML=lunas||'<p class="small muted">Belum ada yang lunas.</p>';
+  document.getElementById('total-hutang').innerText=fmt(totalBelum);
+}
+// === LUNASI SEMUA PIUTANG SEKALIGUS - PAKAI SEKALI AJA ===
+function lunasiSemuaPiutang(){
+  var totalHutang = getTotalPiutang();
+  if(totalHutang===0){ alert('Sudah 0 Bos, tidak ada piutang lagi.'); return; }
+  if(!confirm('Lunasi SEMUA piutang Rp '+fmt(totalHutang)+' jadi Cash?\nIni akan ubah semua Jualan Hutang jadi Cash.')) return;
+  jualList.forEach(function(j){
+    if(j.metode==='Hutang'){ j.metode='Cash'; j.bayar=j.total; j.kembalian=0; }
+  });
+  saveAll(); renderAll(); renderLaporanJual();
+  alert('Berhasil Bos! Semua piutang sudah lunas.\nTotal Piutang sekarang: '+fmt(getTotalPiutang()));
+}
+// === BAYAR TAGIHAN - YANG KEMARIN HILANG, INI PENGGANTINYA ===
+// Dipanggil dari tombol Bayar di halaman Toko / Setoran & Piutang
+function bayarTagihan(tokoId, piutang){
+  var toko = getToko(parseInt(tokoId));
+  if(!toko){ alert('Toko tidak ketemu Bos!'); return; }
+
+  // Kalau piutang tidak dikirim dari tombol, hitung ulang dari data.js yang baru
+  if(!piutang || isNaN(piutang)){
+    piutang = getPiutangToko(toko.id);
+  }
+
+  if(piutang <= 0){ alert(toko.nama+' tidak punya piutang Bos, sudah lunas!'); return; }
+
+  var jml = parseInt(prompt('Bayar piutang '+toko.nama+'\nPiutang: '+fmt(piutang)+'\n\nMasukkan jumlah bayar:', piutang));
+  if(!jml || jml <= 0) return;
+  if(jml > piutang){
+    if(!confirm('Bayarnya lebih dari piutang (Rp '+fmt(jml)+' > Rp '+fmt(piutang)+'). Lanjut?')) return;
+  }
+
+  var metode = prompt('Metode Bayar? Ketik: Cash / Transfer / QRIS', 'Cash');
+  if(!metode) metode = 'Cash';
+  metode = metode.trim();
+
+  // 1. Catat ke setoranList
+  setoranList.unshift({
+    id: Date.now(),
+    tokoId: toko.id,
+    jumlah: jml,
+    tgl: todayStr(),
+    metode: metode,
+    ket: 'Bayar Tagihan via Tombol Bayar'
+  });
+
+  // 2. INI KUNCINYA BOS: Ubah Jualan Hutang jadi Lunas, biar Piutang turun
+  // Kalau ini tidak ada, Piutang dihitung dari jualList tidak akan pernah turun
+  var sisaBayar = jml;
+  jualList.forEach(function(j){
+    if(sisaBayar <= 0) return;
+    if(String(j.tokoId) === String(toko.id) && j.metode === 'Hutang'){
+      if(j.total <= sisaBayar){
+        j.metode = metode;
+        j.bayar = j.total;
+        j.kembalian = 0;
+        sisaBayar -= j.total;
+      }
+    }
+  });
+
+  saveAll();
+  renderAll();
+  if(typeof renderLaporanJual === 'function') renderLaporanJual();
+
+  var sisa = getPiutangToko(toko.id);
+  alert('Pembayaran '+fmt(jml)+' dari '+toko.nama+' tersimpan!\nSisa piutang: '+fmt(sisa));
+  if(confirm('Cetak bukti bayar?')) printTagihanToko(toko.id);
+}
+
+// === CETAK TAGIHAN TOKO - YANG KEMARIN HILANG JUGA ===
+function printTagihanToko(tokoId){
+  var toko = getToko(parseInt(tokoId));
+  if(!toko) return;
+  var piutang = getPiutangToko(toko.id);
+
+  var html = '<h3 style="text-align:center">TAGIHAN - '+toko.nama+'</h3>';
+  html += '<p>Toko: <b>'+toko.nama+'</b><br>Pemilik: '+(toko.pemilik||'-')+'<br>Tanggal: '+todayStr()+'</p>';
+  html += '<p>Total Piutang: <b>'+fmt(piutang)+'</b></p>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;border-bottom:1px solid #000">Tanggal</th><th style="text-align:left;border-bottom:1px solid #000">Produk</th><th style="text-align:right;border-bottom:1px solid #000">Total</th></tr>';
+
+  var ada = false;
+  jualList.forEach(function(j){
+    if(String(j.tokoId) === String(toko.id) && j.metode === 'Hutang'){
+      var p = getProduk(j.produkId);
+      html += '<tr><td>'+j.tgl+'</td><td>'+(p?p.nama:'Produk')+' x '+j.qty+'</td><td style="text-align:right">'+fmt(j.total)+'</td></tr>';
+      ada = true;
+    }
+  });
+  if(!ada) html += '<tr><td colspan="3" style="text-align:center">Sudah lunas, tidak ada tagihan Hutang.</td></tr>';
+  html += '</table>';
+  html += '<p style="text-align:center;font-size:12px;margin-top:20px">Terima kasih 🙏<br>182KOPI - Pekanbaru</p>';
+
+  printWindow('Tagihan '+toko.nama, html);
+}
+// === PERBAIKI DASHBOARD - SAMAKAN PIUTANG DASHBOARD DENGAN JUALAN ===
+function perbaikiDashboard(){
+  // 1. Bangun ulang hutangList dari jualan yang MASIH Hutang aja
+  // Kalau jualan sudah lunas semua, hutangList jadi kosong []
+  var baru = [];
+  var perToko = {};
+  jualList.forEach(function(j){
+    if(j.metode==='Hutang'){
+      var k = String(j.tokoId);
+      if(!perToko[k]) perToko[k] = 0;
+      perToko[k] += j.total;
+    }
+  });
+  for(var k in perToko){
+    baru.push({id: Date.now()+Math.random(), tokoId: parseInt(k), total: perToko[k], sisa: perToko[k], status:'BELUM LUNAS'});
+  }
+
+  var lama = 0;
+  (hutangList||[]).forEach(function(h){ lama += (h.sisa||h.total||0); });
+
+  hutangList = baru; // Timpa hutangList hantu yang 1.548.000 itu
+  saveAll();
+  renderAll();
+
+  alert('Beres Bos!\n\nPiutang Hantu di Dashboard tadi: '+fmt(lama)+'\nPiutang Asli dari Jualan Hutang: '+fmt(getTotalPiutang())+'\n\nSekarang Dashboard sudah sama dengan Lunasi Utang. Coba refresh.');
+}
+
+init();
   
